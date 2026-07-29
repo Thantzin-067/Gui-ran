@@ -1,10 +1,15 @@
 import os
 import subprocess
+import json
 import tkinter as tk
+from tkinter import messagebox
+
+#  Dashboard စပွင့်ချင်း Background က Defender Process အဟောင်းများကို အလိုအလျောက် အမြစ်ပြတ် ရှင်းလင်းမည်
+os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
 
 root = tk.Tk()
 root.title(" Enterprise Ransomware Defense & SOC Monitor")
-root.geometry("850x600")
+root.geometry("850x630")
 root.configure(bg="#0f172a")
 
 defender_process = None
@@ -43,13 +48,24 @@ lbl_canary_val = tk.Label(canary_card, text="SECURE (SAFE)", font=("Arial", 12, 
 lbl_canary_val.pack()
 
 # Log Terminal Box
-log_box = tk.Text(root, height=12, width=90, bg="#020617", fg="#38bdf8", font=("Courier", 10), bd=1, relief="solid")
+log_box = tk.Text(root, height=10, width=90, bg="#020617", fg="#38bdf8", font=("Courier", 10), bd=1, relief="solid")
 log_box.pack(pady=10, padx=20)
 log_box.insert(tk.END, "[SOC MONITOR INITIALIZED] System ready for demonstration...\n")
 
 def log(text):
     log_box.insert(tk.END, text + "\n")
     log_box.see(tk.END)
+
+# Canary Status Checker
+def check_canary_status():
+    if os.path.exists("test_files"):
+        files = os.listdir("test_files")
+        has_locked = any(f.endswith(".locked") for f in files)
+        if has_locked:
+            lbl_canary_val.config(text=" ATTACK BLOCKED!", fg="#ef4444")
+        else:
+            lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
+    root.after(1000, check_canary_status)
 
 # Defender Toggle Logic
 def toggle_defender():
@@ -63,6 +79,8 @@ def toggle_defender():
         defender_process.terminate()
         defender_process.kill()
         defender_process = None
+        # ပိတ်လိုက်သည့်အခါ Process ကျန်မနေစေရန် Auto-Kill ပြုလုပ်မည်
+        os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
         log("[ STOPPED] Defender Watchdog Engine Deactivated.")
         lbl_status_val.config(text="STANDBY (OFF)", fg="#f59e0b")
         btn_def.config(text="1. START DEFENDER ENGINE", bg="#10b981")
@@ -76,16 +94,22 @@ def open_decryptor():
     subprocess.Popen(["python3", "admin_decryptor.py"])
 
 def open_file_manager():
-    # Linux ရဲ့ Native File Manager ကို သီးသန့် ဘေးမှာ ဖွင့်ပေးမည့် Function
     if not os.path.exists("test_files"):
         os.makedirs("test_files")
     subprocess.Popen(["xdg-open", "test_files"])
-    log("[ EXPLORER] Opened test_files directory in Native File Manager.")
+    log("[ EXPLORER] Opened test_files directory.")
+
+def view_report():
+    if os.path.exists("incident_report.json"):
+        with open("incident_report.json", "r") as f:
+            data = json.load(f)
+        report_str = json.dumps(data, indent=4)
+        messagebox.showinfo(" SOC Forensic Incident Report", report_str)
+    else:
+        messagebox.showwarning("No Report", "No attack incident recorded yet.")
 
 def reset_files():
     target_dir = "test_files"
-    
-    # Folder မရှိရင် အသစ်ဆောက်၊ ရှိရင် ထဲက ဖိုင်အဟောင်းတွေ အကုန်ရှင်းမည်
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
     else:
@@ -94,7 +118,6 @@ def reset_files():
             if os.path.isfile(file_path):
                 os.remove(file_path)
 
-    # Python Native နည်းဖြင့် ဖိုင် ၃ ခုကို တိုက်ရိုက် ဖန်တီးမည်
     with open(os.path.join(target_dir, "000_Canary.docx"), "w") as f:
         f.write("Canary File Data for Early Ransomware Detection")
 
@@ -102,27 +125,42 @@ def reset_files():
         f.write("Student Financial Records and Confidential Budget Data")
 
     with open(os.path.join(target_dir, "exam_questions.pdf"), "w") as f:
-        f.write("Confidential Final Exam Question Papers 2024")
+        f.write("Confidential Final Exam Question Papers 2026")
+
+    if os.path.exists("incident_report.json"):
+        os.remove("incident_report.json")
 
     lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
     log("[ RESET] Test Environment Cleaned and Files Re-generated.")
+
+# Window ပိတ်လိုက်ပါက Background Process အားလုံးကို အပြီးသတ် သတ်ပေးမည်
+def on_closing():
+    os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", on_closing)
 
 # Buttons Layout
 frame_btn = tk.Frame(root, bg="#0f172a")
 frame_btn.pack(pady=10)
 
-btn_def = tk.Button(frame_btn, text="1. START DEFENDER ENGINE", command=toggle_defender, bg="#10b981", fg="white", font=("Arial", 10, "bold"), width=30, pady=6)
-btn_def.grid(row=0, column=0, pady=5, padx=10)
+btn_def = tk.Button(frame_btn, text="1. START DEFENDER ENGINE", command=toggle_defender, bg="#10b981", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_def.grid(row=0, column=0, pady=5, padx=8)
 
-btn_atk = tk.Button(frame_btn, text="2. SIMULATE RANSOMWARE ATTACK", command=run_attacker, bg="#f59e0b", fg="white", font=("Arial", 10, "bold"), width=30, pady=6)
-btn_atk.grid(row=0, column=1, pady=5, padx=10)
-btn_dec = tk.Button(frame_btn, text="3. OPEN ADMIN RECOVERY PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font=("Arial", 10, "bold"), width=30, pady=6)
-btn_dec.grid(row=1, column=0, pady=5, padx=10)
+btn_atk = tk.Button(frame_btn, text="2. SIMULATE RANSOMWARE ATTACK", command=run_attacker, bg="#f59e0b", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_atk.grid(row=0, column=1, pady=5, padx=8)
 
-btn_rst = tk.Button(frame_btn, text="RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font=("Arial", 10, "bold"), width=30, pady=6)
-btn_rst.grid(row=1, column=1, pady=5, padx=10)
+btn_dec = tk.Button(frame_btn, text="3. OPEN ADMIN RECOVERY PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_dec.grid(row=1, column=0, pady=5, padx=8)
 
-btn_folder = tk.Button(frame_btn, text=" OPEN TEST_FILES FOLDER", command=open_file_manager, bg="#0284c7", fg="white", font=("Arial", 10, "bold"), width=63, pady=6)
-btn_folder.grid(row=2, column=0, columnspan=2, pady=5, padx=10)
+btn_report = tk.Button(frame_btn, text=" VIEW FORENSIC REPORT", command=view_report, bg="#8b5cf6", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_report.grid(row=1, column=1, pady=5, padx=8)
 
+btn_folder = tk.Button(frame_btn, text=" OPEN TEST_FILES FOLDER", command=open_file_manager, bg="#0284c7", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_folder.grid(row=2, column=0, pady=5, padx=8)
+
+btn_rst = tk.Button(frame_btn, text="RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font=("Arial", 10, "bold"), width=28, pady=5)
+btn_rst.grid(row=2, column=1, pady=5, padx=8)
+
+check_canary_status()
 root.mainloop()
