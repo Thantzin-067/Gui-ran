@@ -1,216 +1,290 @@
+import json
 import os
 import shutil
 import subprocess
-import json
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
-# Background Process အဟောင်းများကို ရှင်းမည်
-os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
+from snapshot_manager import create_snapshot
 
-root = tk.Tk()
-root.title(" Enterprise Ransomware Defense & SOC Monitor")
-root.geometry("880x680")
-root.configure(bg="#0f172a")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEST_FILES_DIR = os.path.join(BASE_DIR, "test_files")
+REPORT_FILE = os.path.join(BASE_DIR, "incident_report.json")
 
+root = None
+log_box = None
+lbl_status_val = None
+lbl_canary_val = None
+btn_def = None
 defender_process = None
-SNAPSHOT_DIR = "file_snapshot_backup"
 
-# Title Bar
-title_frame = tk.Frame(root, bg="#1e293b", pady=10)
-title_frame.pack(fill="x")
-
-title = tk.Label(
-    title_frame, 
-    text=" CANARY DEFENSE & ENTERPRISE SNAPSHOT REBUILD SYSTEM", 
-    font=("Arial", 13, "bold"), 
-    fg="#38bdf8", 
-    bg="#1e293b"
-)
-title.pack()
-
-# Visual Status Cards Frame
-card_frame = tk.Frame(root, bg="#0f172a", pady=12)
-card_frame.pack(fill="x", padx=20)
-
-# Card 1: Engine Status
-status_card = tk.Frame(card_frame, bg="#1e293b", bd=1, relief="solid", padx=15, pady=10)
-status_card.pack(side="left", expand=True, fill="x", padx=5)
-lbl_status_title = tk.Label(status_card, text="DEFENSE ENGINE", font=("Arial", 9, "bold"), fg="#94a3b8", bg="#1e293b")
-lbl_status_title.pack()
-lbl_status_val = tk.Label(status_card, text="STANDBY (OFF)", font=("Arial", 11, "bold"), fg="#f59e0b", bg="#1e293b")
-lbl_status_val.pack()
-
-# Card 2: Canary File Status
-canary_card = tk.Frame(card_frame, bg="#1e293b", bd=1, relief="solid", padx=15, pady=10)
-canary_card.pack(side="left", expand=True, fill="x", padx=5)
-lbl_canary_title = tk.Label(canary_card, text="CANARY INTEGRITY", font=("Arial", 9, "bold"), fg="#94a3b8", bg="#1e293b")
-lbl_canary_title.pack()
-lbl_canary_val = tk.Label(canary_card, text="SECURE (SAFE)", font=("Arial", 11, "bold"), fg="#10b981", bg="#1e293b")
-lbl_canary_val.pack()
-
-# Log Terminal Box
-log_box = tk.Text(root, height=10, width=90, bg="#020617", fg="#38bdf8", font=("Courier", 10), bd=1, relief="solid")
-log_box.pack(pady=10, padx=20)
-log_box.insert(tk.END, "[SOC MONITOR INITIALIZED] System ready for demonstration...\n")
 
 def log(text):
-    log_box.insert(tk.END, text + "\n")
-    log_box.see(tk.END)
+    if log_box is not None:
+        log_box.insert(tk.END, text + "\n")
+        log_box.see(tk.END)
 
-# Canary Status Checker
+
+def get_project_path(*parts):
+    return os.path.join(BASE_DIR, *parts)
+
+
+def ensure_test_files_dir():
+    os.makedirs(TEST_FILES_DIR, exist_ok=True)
+
+
 def check_canary_status():
-    if os.path.exists("test_files"):
-        files = os.listdir("test_files")
-        has_locked = any(f.endswith(".locked") for f in files)
+    ensure_test_files_dir()
+    files = os.listdir(TEST_FILES_DIR)
+    has_locked = any(f.endswith(".locked") for f in files)
+
+    if lbl_canary_val is not None:
         if has_locked:
-            lbl_canary_val.config(text=" ATTACK DETECTED!", fg="#ef4444")
+            lbl_canary_val.config(text="ATTACK BLOCKED!", fg="#ef4444")
         else:
             lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-    root.after(1000, check_canary_status)
 
-# Defender Toggle Logic
+    if root is not None:
+        root.after(1000, check_canary_status)
+
+
+def start_defender_process():
+    global defender_process
+
+    if defender_process is not None and defender_process.poll() is None:
+        return defender_process
+
+    defender_script = get_project_path("defender_detector.py")
+    defender_process = subprocess.Popen(
+        [sys.executable, defender_script],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+    log("[ACTIVATED] Defender Watchdog Engine is now RUNNING.")
+    if lbl_status_val is not None:
+        lbl_status_val.config(text="ACTIVE (MONITORING)", fg="#10b981")
+    if btn_def is not None:
+        btn_def.configure(bg="#ef4444", text="STOP DEFENDER ENGINE")
+    return defender_process
+
+
 def toggle_defender():
     global defender_process
-    if defender_process is None:
-        defender_process = subprocess.Popen(["python3", "defender_detector.py"])
-        log("[ ACTIVATED] Defender Watchdog Engine is now RUNNING.")
-        lbl_status_val.config(text="ACTIVE (MONITORING)", fg="#10b981")
-        btn_def.config(text="STOP DEFENDER ENGINE", bg="#ef4444")
+
+    if defender_process is None or defender_process.poll() is not None:
+        start_defender_process()
     else:
         defender_process.terminate()
-        defender_process.kill()
+        try:
+            defender_process.kill()
+        except Exception:
+            pass
         defender_process = None
         os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
-        log("[ STOPPED] Defender Watchdog Engine Deactivated.")
-        lbl_status_val.config(text="STANDBY (OFF)", fg="#f59e0b")
-        btn_def.config(text="1. START DEFENDER ENGINE", bg="#10b981")
+        log("[STOPPED] Defender Watchdog Engine Deactivated.")
+        if lbl_status_val is not None:
+            lbl_status_val.config(text="STANDBY (OFF)", fg="#f59e0b")
+        if btn_def is not None:
+            btn_def.configure(bg="#10b981", text="1. START DEFENDER ENGINE")
+
 
 def run_attacker():
-    log("[ ATTACK DETECTED] Simulating Ransomware Attack...")
-    subprocess.Popen(["python3", "attacker_ransomware.py"])
+    log("[SNAPSHOT] Creating a fresh backup before the attack simulation...")
+    create_snapshot(
+        target_dir=TEST_FILES_DIR,
+        snapshot_root=get_project_path("snapshots"),
+        label="pre_attack",
+    )
+    # Defender will NOT automatically turn on here anymore.
+    # If it is already running, it will detect and block. If off, attack proceeds.
+    log("[ATTACK] Simulating Ransomware Attack...")
+    attacker_script = get_project_path("attacker_ransomware.py")
+    subprocess.Popen(
+        [sys.executable, attacker_script],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
 
 def open_decryptor():
-    log("[ RECOVERY] Launching Admin Decryption Suite...")
-    subprocess.Popen(["python3", "admin_decryptor.py"])
+    log("[RECOVERY] Launching Admin Decryption Suite...")
+    decryptor_script = get_project_path("admin_decryptor.py")
+    subprocess.Popen(
+        [sys.executable, decryptor_script],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
 
 def open_file_manager():
-    target_dir = os.path.abspath("test_files")
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
-    # File Manager Process အဟောင်းရှိရင် ရှင်းပစ်ပြီးမှ အသစ်ပြန်ဖွင့်မည် (Force Refresh)
-    os.system("pkill -f nautilus > /dev/null 2>&1")
-    subprocess.Popen(["xdg-open", target_dir])
-    log(f"[ EXPLORER] Opened directory: {target_dir}")
+    ensure_test_files_dir()
+    subprocess.Popen(["xdg-open", TEST_FILES_DIR])
+    log("[EXPLORER] Opened test_files directory.")
+
+
+def open_snapshot_manager():
+    log("[SNAPSHOT] Opening snapshot management window...")
+    snapshot_gui = get_project_path("snapshot_gui.py")
+    subprocess.Popen(
+        [sys.executable, snapshot_gui],
+        cwd=BASE_DIR,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
 
 def view_report():
-    if os.path.exists("incident_report.json"):
-        with open("incident_report.json", "r") as f:
+    if os.path.exists(REPORT_FILE):
+        with open(REPORT_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         report_str = json.dumps(data, indent=4)
-        messagebox.showinfo(" SOC Forensic Incident Report", report_str)
+        messagebox.showinfo("SOC Forensic Incident Report", report_str)
     else:
         messagebox.showwarning("No Report", "No attack incident recorded yet.")
 
-#  Snapshot & Rebuild Functions
-def take_snapshot():
-    target_dir = "test_files"
-    if os.path.exists(target_dir):
-        if os.path.exists(SNAPSHOT_DIR):
-            shutil.rmtree(SNAPSHOT_DIR)
-        shutil.copytree(target_dir, SNAPSHOT_DIR)
-        log("[ SNAPSHOT] Safe System State Captured successfully!")
 
-def rebuild_from_snapshot():
-    target_dir = os.path.abspath("test_files")
-    
-    if os.path.exists(SNAPSHOT_DIR):
-        # 1. target_dir မရှိသေးရင် ဆောက်မယ်
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
-
-        # 2. target_dir ထဲမှာရှိတဲ့ Current/Encrypted Files များကိုပဲ ကင်းစင်အောင် ရှင်းမယ် (Folder ကို မဖျက်ပါ)
-        for item in os.listdir(target_dir):
-            item_path = os.path.join(target_dir, item)
-            if os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-            else:
-                os.remove(item_path)
-
-        # 3. Snapshot Backup ထဲက ဖိုင်/Folder များကို target_dir ထဲသို့ တစ်ခုချင်း Copy ကူးထည့်မည်
-        for item in os.listdir(SNAPSHOT_DIR):
-            s = os.path.join(SNAPSHOT_DIR, item)
-            d = os.path.join(target_dir, item)
-            if os.path.isdir(s):
-                shutil.copytree(s, d)
-            else:
-                shutil.copy2(s, d)
-        
-        lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-        log("[ REBUILD] System Restored Perfectly from Snapshot Backup!")
-        messagebox.showinfo("Rebuild Complete", "Files successfully restored from Snapshot backup!")
-    else:
-        messagebox.showwarning("No Snapshot", "Please take a snapshot first before rebuilding!")
-        log("[ WARNING] No snapshot backup found to restore from.")
-        log("[ WARNING] No snapshot backup found to restore from.")
 def reset_files():
-    target_dir = "test_files"
-    
-    if os.path.exists(target_dir):
-        shutil.rmtree(target_dir)
-    os.makedirs(target_dir)
+    ensure_test_files_dir()
 
-    with open(os.path.join(target_dir, "000_Canary.docx"), "w") as f:
+    for item in os.listdir(TEST_FILES_DIR):
+        item_path = os.path.join(TEST_FILES_DIR, item)
+        if os.path.isfile(item_path):
+            os.remove(item_path)
+        elif os.path.isdir(item_path):
+            shutil.rmtree(item_path)
+
+    with open(os.path.join(TEST_FILES_DIR, "000_Canary.docx"), "w", encoding="utf-8") as f:
         f.write("Canary File Data for Early Ransomware Detection")
 
-    with open(os.path.join(target_dir, "financial_report.docx"), "w") as f:
+    with open(os.path.join(TEST_FILES_DIR, "financial_report.docx"), "w", encoding="utf-8") as f:
         f.write("Student Financial Records and Confidential Budget Data")
 
-    with open(os.path.join(target_dir, "exam_questions.pdf"), "w") as f:
+    with open(os.path.join(TEST_FILES_DIR, "exam_questions.pdf"), "w", encoding="utf-8") as f:
         f.write("Confidential Final Exam Question Papers 2026")
 
-    take_snapshot()
+    if os.path.exists(REPORT_FILE):
+        os.remove(REPORT_FILE)
 
-    if os.path.exists("incident_report.json"):
-        os.remove("incident_report.json")
+    if lbl_canary_val is not None:
+        lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
+    log("[RESET] Test Environment Cleaned and Files Re-generated.")
 
-    lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-    log("[ RESET] Test Environment Cleaned, Re-generated & Snapshot Taken.")
-    
-    open_file_manager()
 
 def on_closing():
+    if defender_process is not None:
+        try:
+            defender_process.terminate()
+            defender_process.kill()
+        except Exception:
+            pass
     os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
-    root.destroy()
+    if root is not None:
+        root.destroy()
 
-root.protocol("WM_DELETE_WINDOW", on_closing)
 
-# Buttons Layout
-frame_btn = tk.Frame(root, bg="#0f172a")
-frame_btn.pack(pady=10)
+def build_dashboard():
+    global root, log_box, lbl_status_val, lbl_canary_val, btn_def
 
-btn_def = tk.Button(frame_btn, text="1. START DEFENDER ENGINE", command=toggle_defender, bg="#10b981", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_def.grid(row=0, column=0, pady=4, padx=6)
+    root = tk.Tk()
+    root.title("Enterprise Ransomware Defense & SOC Monitor")
 
-btn_atk = tk.Button(frame_btn, text="2. SIMULATE ATTACK", command=run_attacker, bg="#f59e0b", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_atk.grid(row=0, column=1, pady=4, padx=6)
+    window_width = 1200
+    window_height = 820
 
-btn_dec = tk.Button(frame_btn, text="3. ADMIN DECRYPT PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_dec.grid(row=1, column=0, pady=4, padx=6)
+    root.update_idletasks()
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
 
-btn_rebuild = tk.Button(frame_btn, text=" REBUILD FROM SNAPSHOT", command=rebuild_from_snapshot, bg="#06b6d4", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_rebuild.grid(row=1, column=1, pady=4, padx=6)
+    x = max(0, (screen_width // 2) - (window_width // 2))
+    y = max(0, (screen_height // 2) - (window_height // 2))
 
-btn_report = tk.Button(frame_btn, text=" VIEW FORENSIC REPORT", command=view_report, bg="#8b5cf6", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_report.grid(row=2, column=0, pady=4, padx=6)
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    root.minsize(850, 600)
+    root.configure(bg="#07111f")
+    root.option_add("*Font", "Sans 10")
 
-btn_snap = tk.Button(frame_btn, text=" TAKE SNAPSHOT", command=take_snapshot, bg="#d97706", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_snap.grid(row=2, column=1, pady=4, padx=6)
-btn_folder = tk.Button(frame_btn, text=" OPEN TEST_FILES FOLDER", command=open_file_manager, bg="#0284c7", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_folder.grid(row=3, column=0, pady=4, padx=6)
+    header_frame = tk.Frame(root, bg="#111c31", bd=1, relief="raised", padx=20, pady=12)
+    header_frame.pack(fill="x", padx=16, pady=(12, 6))
 
-btn_rst = tk.Button(frame_btn, text="RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
-btn_rst.grid(row=3, column=1, pady=4, padx=6)
+    title = tk.Label(header_frame, text="CANARY-BASED REAL-TIME RANSOMWARE DEFENSE", bg="#111c31", fg="#7dd3fc", font="Sans 16 bold")
+    title.pack(anchor="w")
+    subtitle = tk.Label(header_frame, text="Enterprise monitoring, detection, recovery, and snapshot rollback workflow", bg="#111c31", fg="#94a3b8", font="Sans 9")
+    subtitle.pack(anchor="w", pady=(2, 0))
 
-check_canary_status()
-root.mainloop()
+    card_frame = tk.Frame(root, bg="#07111f", padx=16, pady=4)
+    card_frame.pack(fill="x")
+
+    status_card = tk.Frame(card_frame, bg="#111c31", bd=1, relief="raised", padx=16, pady=10)
+    status_card.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=4)
+
+    canary_card = tk.Frame(card_frame, bg="#111c31", bd=1, relief="raised", padx=16, pady=10)
+    canary_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=4)
+
+    card_frame.columnconfigure(0, weight=1)
+    card_frame.columnconfigure(1, weight=1)
+
+    lbl_status_title = tk.Label(status_card, text="DEFENSE ENGINE", bg="#111c31", fg="#94a3b8", font="Sans 9")
+    lbl_status_title.pack(anchor="w")
+    lbl_status_val = tk.Label(status_card, text="STANDBY (OFF)", bg="#111c31", fg="#f59e0b", font="Sans 12 bold")
+    lbl_status_val.pack(anchor="w", pady=(4, 0))
+
+    lbl_canary_title = tk.Label(canary_card, text="CANARY INTEGRITY", bg="#111c31", fg="#94a3b8", font="Sans 9")
+    lbl_canary_title.pack(anchor="w")
+    lbl_canary_val = tk.Label(canary_card, text="SECURE (SAFE)", bg="#111c31", fg="#10b981", font="Sans 12 bold")
+    lbl_canary_val.pack(anchor="w", pady=(4, 0))
+
+    frame_btn = tk.Frame(root, bg="#07111f", padx=16, pady=6)
+    frame_btn.pack(side="bottom", fill="x", pady=(0, 8))
+
+    log_frame = tk.Frame(root, bg="#111c31", bd=1, relief="raised", padx=12, pady=10)
+    log_frame.pack(side="top", fill="both", expand=True, padx=16, pady=6)
+
+    log_box = tk.Text(log_frame, height=6, width=100, bg="#020617", fg="#7dd3fc", font="Monospace 10", bd=0, relief="flat", wrap="word")
+    log_box.pack(fill="both", expand=True)
+    log_box.insert(tk.END, "[SOC MONITOR INITIALIZED] System ready for demonstration...\n")
+
+    btn_def = tk.Button(frame_btn, text="1. START DEFENDER ENGINE", command=toggle_defender, bg="#10b981", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_def.grid(row=0, column=0, padx=6, pady=4, sticky="ew")
+
+    btn_atk = tk.Button(frame_btn, text="2. SIMULATE RANSOMWARE ATTACK", command=run_attacker, bg="#f59e0b", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_atk.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
+
+    btn_dec = tk.Button(frame_btn, text="3. OPEN ADMIN RECOVERY PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_dec.grid(row=1, column=0, padx=6, pady=4, sticky="ew")
+
+    btn_report = tk.Button(frame_btn, text="4.VIEW FORENSIC REPORT", command=view_report, bg="#8b5cf6", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_report.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
+
+    btn_folder = tk.Button(frame_btn, text="5. OPEN TEST FILES FOLDER", command=open_file_manager, bg="#0ea5e9", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_folder.grid(row=2, column=0, padx=6, pady=4, sticky="ew")
+
+    btn_snap = tk.Button(frame_btn, text="6. OPEN SNAPSHOT MANAGER", command=open_snapshot_manager, bg="#0ea5e9", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_snap.grid(row=2, column=1, padx=6, pady=4, sticky="ew")
+
+    btn_rst = tk.Button(frame_btn, text="7. RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_rst.grid(row=3, column=0, columnspan=2, padx=6, pady=4, sticky="ew")
+
+    for col in range(2):
+        frame_btn.columnconfigure(col, weight=1)
+
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+    check_canary_status()
+    return root
+
+
+def main():
+    build_dashboard()
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

@@ -11,7 +11,7 @@ PRIVATE_KEY_PATH = "keys/private_key.pem"
 
 root = tk.Tk()
 root.title("Admin Decryption Dashboard")
-root.geometry("600x480")
+root.geometry("800x600")
 root.configure(bg="#1e1e2e")
 
 # Title Label
