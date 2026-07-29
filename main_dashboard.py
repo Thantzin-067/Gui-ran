@@ -18,7 +18,7 @@ lbl_status_val = None
 lbl_canary_val = None
 btn_def = None
 defender_process = None
-SNAPSHOT_DIR = "file_snapshot_backup"
+
 
 def log(text):
     if log_box is not None:
@@ -99,6 +99,8 @@ def run_attacker():
         snapshot_root=get_project_path("snapshots"),
         label="pre_attack",
     )
+    # Defender will NOT automatically turn on here anymore.
+    # If it is already running, it will detect and block. If off, attack proceeds.
     log("[ATTACK] Simulating Ransomware Attack...")
     attacker_script = get_project_path("attacker_ransomware.py")
     subprocess.Popen(
@@ -150,46 +152,6 @@ def view_report():
         messagebox.showwarning("No Report", "No attack incident recorded yet.")
 
 
-def take_snapshot():
-    target_dir = TEST_FILES_DIR
-    if os.path.exists(target_dir):
-        if os.path.exists(SNAPSHOT_DIR):
-            shutil.rmtree(SNAPSHOT_DIR)
-        shutil.copytree(target_dir, SNAPSHOT_DIR)
-        log("[SNAPSHOT] Safe System State Captured successfully!")
-
-
-def rebuild_from_snapshot():
-    target_dir = os.path.abspath(TEST_FILES_DIR)
-    
-    if os.path.exists(SNAPSHOT_DIR):
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
-
-        for item in os.listdir(target_dir):
-            item_path = os.path.join(target_dir, item)
-            if os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-            else:
-                os.remove(item_path)
-
-        for item in os.listdir(SNAPSHOT_DIR):
-            s = os.path.join(SNAPSHOT_DIR, item)
-            d = os.path.join(target_dir, item)
-            if os.path.isdir(s):
-                shutil.copytree(s, d)
-            else:
-                shutil.copy2(s, d)
-        
-        if lbl_canary_val is not None:
-            lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-        log("[REBUILD] System Restored Perfectly from Snapshot Backup!")
-        messagebox.showinfo("Rebuild Complete", "Files successfully restored from Snapshot backup!")
-    else:
-        messagebox.showwarning("No Snapshot", "Please take a snapshot first before rebuilding!")
-        log("[WARNING] No snapshot backup found to restore from.")
-
-
 def reset_files():
     ensure_test_files_dir()
 
@@ -209,16 +171,12 @@ def reset_files():
     with open(os.path.join(TEST_FILES_DIR, "exam_questions.pdf"), "w", encoding="utf-8") as f:
         f.write("Confidential Final Exam Question Papers 2026")
 
-    take_snapshot()
-
     if os.path.exists(REPORT_FILE):
         os.remove(REPORT_FILE)
 
     if lbl_canary_val is not None:
         lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-    log("[RESET] Test Environment Cleaned, Re-generated & Snapshot Taken.")
-    
-    open_file_manager()
+    log("[RESET] Test Environment Cleaned and Files Re-generated.")
 
 
 def on_closing():
@@ -235,8 +193,6 @@ def on_closing():
 
 def build_dashboard():
     global root, log_box, lbl_status_val, lbl_canary_val, btn_def
-
-    os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
 
     root = tk.Tk()
     root.title("Enterprise Ransomware Defense & SOC Monitor")
@@ -305,20 +261,17 @@ def build_dashboard():
     btn_dec = tk.Button(frame_btn, text="3. OPEN ADMIN RECOVERY PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font="Sans 10 bold", pady=5, width=30)
     btn_dec.grid(row=1, column=0, padx=6, pady=4, sticky="ew")
 
-    btn_rebuild = tk.Button(frame_btn, text="4. REBUILD FROM SNAPSHOT", command=rebuild_from_snapshot, bg="#06b6d4", fg="white", font="Sans 10 bold", pady=5, width=30)
-    btn_rebuild.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
+    btn_report = tk.Button(frame_btn, text="4.VIEW FORENSIC REPORT", command=view_report, bg="#8b5cf6", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_report.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
 
-    btn_report = tk.Button(frame_btn, text="5. VIEW FORENSIC REPORT", command=view_report, bg="#8b5cf6", fg="white", font="Sans 10 bold", pady=5, width=30)
-    btn_report.grid(row=2, column=0, padx=6, pady=4, sticky="ew")
+    btn_folder = tk.Button(frame_btn, text="5. OPEN TEST FILES FOLDER", command=open_file_manager, bg="#0ea5e9", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_folder.grid(row=2, column=0, padx=6, pady=4, sticky="ew")
 
     btn_snap = tk.Button(frame_btn, text="6. OPEN SNAPSHOT MANAGER", command=open_snapshot_manager, bg="#0ea5e9", fg="white", font="Sans 10 bold", pady=5, width=30)
     btn_snap.grid(row=2, column=1, padx=6, pady=4, sticky="ew")
 
-    btn_folder = tk.Button(frame_btn, text="7. OPEN TEST FILES FOLDER", command=open_file_manager, bg="#0284c7", fg="white", font="Sans 10 bold", pady=5, width=30)
-    btn_folder.grid(row=3, column=0, padx=6, pady=4, sticky="ew")
-
-    btn_rst = tk.Button(frame_btn, text="8. RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font="Sans 10 bold", pady=5, width=30)
-    btn_rst.grid(row=3, column=1, padx=6, pady=4, sticky="ew")
+    btn_rst = tk.Button(frame_btn, text="7. RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_rst.grid(row=3, column=0, columnspan=2, padx=6, pady=4, sticky="ew")
 
     for col in range(2):
         frame_btn.columnconfigure(col, weight=1)
