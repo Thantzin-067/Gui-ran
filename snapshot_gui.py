@@ -4,7 +4,6 @@ from tkinter import messagebox, ttk
 
 from snapshot_manager import create_snapshot, delete_snapshot, list_snapshots, rollback_snapshot
 
-
 class SnapshotManagerWindow:
     def __init__(self, root):
         self.root = root
@@ -13,6 +12,9 @@ class SnapshotManagerWindow:
         self.root.minsize(900, 600)
         self.root.configure(bg="#07111f")
         self.root.option_add("*Font", ("Sans", 10))
+        
+        # ... (ကျန်တဲ့ မင်းရဲ့ မူရင်း UI Code တွေ ဒီအောက်မှာ ဆက်ထားပါ)
+
 
         # --- Header Section ---
         header = tk.Frame(root, bg="#111c31", bd=1, relief="raised", padx=20, pady=14)
@@ -38,7 +40,7 @@ class SnapshotManagerWindow:
         btn_refresh = tk.Button(control_frame, text="Refresh List", command=self.refresh_list, bg="#3b82f6", fg="white", font=("Sans", 10, "bold"), padx=10, pady=4)
         btn_refresh.pack(side="left", padx=4)
 
-        # --- Action Buttons (Docked to Bottom to Prevent Overlap) ---
+        # --- Action Buttons ---
         action_frame = tk.Frame(root, bg="#07111f", padx=20, pady=6)
         action_frame.pack(side="bottom", fill="x", pady=(0, 16))
 
@@ -54,11 +56,10 @@ class SnapshotManagerWindow:
         for col in range(3):
             action_frame.columnconfigure(col, weight=1)
 
-        # --- Treeview Table Frame (Expands in the Middle) ---
+        # --- Treeview Table Frame ---
         tree_frame = tk.Frame(root, bg="#111c31", bd=1, relief="raised", padx=12, pady=10)
         tree_frame.pack(side="top", fill="both", expand=True, padx=20, pady=6)
 
-        # Custom styling to match dark theme cleanly
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Treeview", background="#020617", foreground="#7dd3fc", fieldbackground="#020617", font=("Monospace", 10), rowheight=24)
@@ -69,11 +70,10 @@ class SnapshotManagerWindow:
         self.tree.heading("version", text="Version")
         self.tree.heading("name", text="Snapshot Name")
         self.tree.heading("created_at", text="Created At")
-        
+
         self.tree.column("version", width=80, anchor="center")
         self.tree.column("name", width=460, anchor="w")
         self.tree.column("created_at", width=220, anchor="center")
-
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
 
@@ -86,7 +86,7 @@ class SnapshotManagerWindow:
         label = self.label_entry.get().strip() or "manual"
         snapshot = create_snapshot(label=label)
         self.refresh_list()
-        messagebox.showinfo("Snapshot Created", f"Successfully created snapshot version {snapshot['version']}")
+        messagebox.showinfo("Snapshot Created", f"Snapshot Version {snapshot['version']} created successfully.")
 
     def refresh_list(self):
         for row in self.tree.get_children():
@@ -96,6 +96,20 @@ class SnapshotManagerWindow:
         for snapshot in snapshots:
             self.tree.insert("", "end", values=(snapshot["version"], snapshot["name"], snapshot["created_at"]))
 
+    # def rollback_selected(self):
+    #     selected = self.tree.selection()
+    #     if not selected:
+    #         messagebox.showwarning("No Selection", "Please select a snapshot row from the table to rollback.")
+    #         return
+
+    #     item = self.tree.item(selected[0])
+    #     version = item["values"][0]
+    #     if messagebox.askyesno("Confirm Rollback", f"Are you sure you want to restore test files to snapshot version {version}?"):
+    #         ok = rollback_snapshot(version=int(version))
+    #         if ok:
+    #             messagebox.showinfo("Rollback Complete", f"Test files successfully restored from snapshot version {version}.")
+    #         else:
+    #             messagebox.showerror("Rollback Failed", f"Snapshot version {version} could not be restored.")
     def rollback_selected(self):
         selected = self.tree.selection()
         if not selected:
@@ -105,11 +119,15 @@ class SnapshotManagerWindow:
         item = self.tree.item(selected[0])
         version = item["values"][0]
         if messagebox.askyesno("Confirm Rollback", f"Are you sure you want to restore test files to snapshot version {version}?"):
-            ok = rollback_snapshot(version=int(version))
-            if ok:
-                messagebox.showinfo("Rollback Complete", f"Successfully restored environment to snapshot version {version}")
+            result = rollback_snapshot(version=int(version))
+            if result["success"]:
+                msg = f"Restored test files from snapshot version {version}.\n\n"
+                msg += f" SHA-256 Data Integrity Check:\n"
+                msg += f"Files Verified: {result['verified_count']}\n\n"
+                msg += f"Hash Verification Logs:\n{result['logs']}"
+                messagebox.showinfo("Rollback & Hash Verified", msg)
             else:
-                messagebox.showerror("Rollback Failed", f"Snapshot version {version} could not be restored.")
+                messagebox.showerror("Rollback Failed", result["message"])
 
     def delete_selected(self):
         selected = self.tree.selection()

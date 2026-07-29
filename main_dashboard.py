@@ -130,14 +130,22 @@ def open_file_manager():
     log("[EXPLORER] Opened test_files directory.")
 
 
+# def open_snapshot_manager():
+#     log("[SNAPSHOT] Opening snapshot management window...")
+#     snapshot_gui = get_project_path("snapshot_gui.py")
+#     subprocess.Popen(
+#         [sys.executable, snapshot_gui],
+#         cwd=BASE_DIR,
+#         stdout=subprocess.DEVNULL,
+#         stderr=subprocess.DEVNULL,
+#         start_new_session=True,
+#     )
 def open_snapshot_manager():
     log("[SNAPSHOT] Opening snapshot management window...")
     snapshot_gui = get_project_path("snapshot_gui.py")
     subprocess.Popen(
         [sys.executable, snapshot_gui],
         cwd=BASE_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
 

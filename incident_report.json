@@ -1,8 +1,8 @@
 {
-    "timestamp": "2026-07-29 15:53:57",
+    "timestamp": "2026-07-29 20:35:13",
     "status": "THREAT BLOCKED",
     "detected_by": "Canary Integrity Monitor",
     "compromised_canary": "000_Canary.docx",
-    "terminated_process_pid": 84456,
+    "terminated_process_pid": 66389,
     "action_taken": "Process Terminated & Protection Enforced"
 }
