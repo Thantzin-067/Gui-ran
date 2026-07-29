@@ -4,7 +4,7 @@ import tkinter as tk
 
 root = tk.Tk()
 root.title(" Enterprise Ransomware Defense & SOC Monitor")
-root.geometry("850x600")
+root.geometry("1250x800")
 root.configure(bg="#0f172a")
 
 # Defender Process ကို ထိန်းချုပ်မည့် Variable (စစချင်းမှာ None ဖြစ်ရမည်)
