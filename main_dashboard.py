@@ -99,7 +99,8 @@ def run_attacker():
         snapshot_root=get_project_path("snapshots"),
         label="pre_attack",
     )
-    start_defender_process()
+    # Defender will NOT automatically turn on here anymore.
+    # If it is already running, it will detect and block. If off, attack proceeds.
     log("[ATTACK] Simulating Ransomware Attack...")
     attacker_script = get_project_path("attacker_ransomware.py")
     subprocess.Popen(
