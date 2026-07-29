@@ -5,7 +5,7 @@ import json
 import tkinter as tk
 from tkinter import messagebox
 
-# Dashboard စပွင့်တာနဲ Background Process အဟောင်းများကို ရှင်းမည်
+# Background Process အဟောင်းများကို ရှင်းမည်
 os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
 
 root = tk.Tk()
@@ -15,13 +15,6 @@ root.configure(bg="#0f172a")
 
 defender_process = None
 SNAPSHOT_DIR = "file_snapshot_backup"
-
-# Background Snapshot Creator Function
-def create_initial_snapshot():
-    target_dir = "test_files"
-    if os.path.exists(target_dir):
-        if not os.path.exists(SNAPSHOT_DIR):
-            shutil.copytree(target_dir, SNAPSHOT_DIR)
 
 # Title Bar
 title_frame = tk.Frame(root, bg="#1e293b", pady=10)
@@ -102,10 +95,13 @@ def open_decryptor():
     subprocess.Popen(["python3", "admin_decryptor.py"])
 
 def open_file_manager():
-    if not os.path.exists("test_files"):
-        os.makedirs("test_files")
-    subprocess.Popen(["xdg-open", "test_files"])
-    log("[ EXPLORER] Opened test_files directory.")
+    target_dir = os.path.abspath("test_files")
+    if not os.path.exists(target_dir):
+        os.makedirs(target_dir)
+    # File Manager Process အဟောင်းရှိရင် ရှင်းပစ်ပြီးမှ အသစ်ပြန်ဖွင့်မည် (Force Refresh)
+    os.system("pkill -f nautilus > /dev/null 2>&1")
+    subprocess.Popen(["xdg-open", target_dir])
+    log(f"[ EXPLORER] Opened directory: {target_dir}")
 
 def view_report():
     if os.path.exists("incident_report.json"):
@@ -116,7 +112,6 @@ def view_report():
     else:
         messagebox.showwarning("No Report", "No attack incident recorded yet.")
 
-##  Snapshot & Rebuild Functions
 #  Snapshot & Rebuild Functions
 def take_snapshot():
     target_dir = "test_files"
@@ -127,50 +122,44 @@ def take_snapshot():
         log("[ SNAPSHOT] Safe System State Captured successfully!")
 
 def rebuild_from_snapshot():
-    target_dir = "test_files"
+    target_dir = os.path.abspath("test_files")
     
-    # test_files မရှိရင် ဆောက်မယ်
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
+    if os.path.exists(SNAPSHOT_DIR):
+        # 1. target_dir မရှိသေးရင် ဆောက်မယ်
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
 
-    # 1. Snapshot Folder ထဲမှာ ဖိုင်ရှိရင် Snapshot ကနေ ရွှေ့မယ်
-    if os.path.exists(SNAPSHOT_DIR) and len(os.listdir(SNAPSHOT_DIR)) > 0:
-        for f in os.listdir(target_dir):
-            os.remove(os.path.join(target_dir, f))
+        # 2. target_dir ထဲမှာရှိတဲ့ Current/Encrypted Files များကိုပဲ ကင်းစင်အောင် ရှင်းမယ် (Folder ကို မဖျက်ပါ)
+        for item in os.listdir(target_dir):
+            item_path = os.path.join(target_dir, item)
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+            else:
+                os.remove(item_path)
+
+        # 3. Snapshot Backup ထဲက ဖိုင်/Folder များကို target_dir ထဲသို့ တစ်ခုချင်း Copy ကူးထည့်မည်
         for item in os.listdir(SNAPSHOT_DIR):
             s = os.path.join(SNAPSHOT_DIR, item)
             d = os.path.join(target_dir, item)
-            if os.path.isfile(s):
+            if os.path.isdir(s):
+                shutil.copytree(s, d)
+            else:
                 shutil.copy2(s, d)
+        
+        lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
+        log("[ REBUILD] System Restored Perfectly from Snapshot Backup!")
+        messagebox.showinfo("Rebuild Complete", "Files successfully restored from Snapshot backup!")
     else:
-        # 2. Snapshot မရှိပါက Direct File 3 ခုကို ချက်ချင်း ဖန်တီးမည်
-        with open(os.path.join(target_dir, "000_Canary.docx"), "w") as f:
-            f.write("Canary File Data for Early Ransomware Detection")
-
-        with open(os.path.join(target_dir, "financial_report.docx"), "w") as f:
-            f.write("Student Financial Records and Confidential Budget Data")
-
-        with open(os.path.join(target_dir, "exam_questions.pdf"), "w") as f:
-            f.write("Confidential Final Exam Question Papers 2026")
-
-    lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
-    log("[ REBUILD] System Restored to Clean Snapshot State!")
-    messagebox.showinfo("Rebuild Complete", "All corrupted/locked files rebuilt successfully!")
-
+        messagebox.showwarning("No Snapshot", "Please take a snapshot first before rebuilding!")
+        log("[ WARNING] No snapshot backup found to restore from.")
+        log("[ WARNING] No snapshot backup found to restore from.")
 def reset_files():
     target_dir = "test_files"
     
-    # test_files မရှိရင် ဆောက်မယ်
-    if not os.path.exists(target_dir):
-        os.makedirs(target_dir)
+    if os.path.exists(target_dir):
+        shutil.rmtree(target_dir)
+    os.makedirs(target_dir)
 
-    # test_files ထဲက လက်ရှိဖိုင်အကုန် ဖျက်မယ်
-    for f in os.listdir(target_dir):
-        file_path = os.path.join(target_dir, f)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-
-    # Clean MOCK Files အသစ်ပြန်ဖန်တီးမည်
     with open(os.path.join(target_dir, "000_Canary.docx"), "w") as f:
         f.write("Canary File Data for Early Ransomware Detection")
 
@@ -180,7 +169,6 @@ def reset_files():
     with open(os.path.join(target_dir, "exam_questions.pdf"), "w") as f:
         f.write("Confidential Final Exam Question Papers 2026")
 
-    # ဖိုင် ၃ ခု အသစ်ဆောက်ပြီးမှ Snapshot ချက်ချင်း ယူမည်!
     take_snapshot()
 
     if os.path.exists("incident_report.json"):
@@ -188,6 +176,8 @@ def reset_files():
 
     lbl_canary_val.config(text="SECURE (SAFE)", fg="#10b981")
     log("[ RESET] Test Environment Cleaned, Re-generated & Snapshot Taken.")
+    
+    open_file_manager()
 
 def on_closing():
     os.system("pkill -9 -f defender_detector.py > /dev/null 2>&1")
@@ -216,12 +206,11 @@ btn_report.grid(row=2, column=0, pady=4, padx=6)
 
 btn_snap = tk.Button(frame_btn, text=" TAKE SNAPSHOT", command=take_snapshot, bg="#d97706", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
 btn_snap.grid(row=2, column=1, pady=4, padx=6)
-
 btn_folder = tk.Button(frame_btn, text=" OPEN TEST_FILES FOLDER", command=open_file_manager, bg="#0284c7", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
 btn_folder.grid(row=3, column=0, pady=4, padx=6)
+
 btn_rst = tk.Button(frame_btn, text="RESET TEST ENVIRONMENT", command=reset_files, bg="#64748b", fg="white", font=("Arial", 9, "bold"), width=28, pady=5)
 btn_rst.grid(row=3, column=1, pady=4, padx=6)
 
-create_initial_snapshot()
 check_canary_status()
 root.mainloop()
