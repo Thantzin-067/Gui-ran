@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tkinter as tk
 from tkinter import messagebox
+import phishing_entry
 
 from snapshot_manager import create_snapshot
 
@@ -263,7 +264,7 @@ def build_dashboard():
     btn_def = tk.Button(frame_btn, text="1. START DEFENDER ENGINE", command=toggle_defender, bg="#10b981", fg="white", font="Sans 10 bold", pady=5, width=30)
     btn_def.grid(row=0, column=0, padx=6, pady=4, sticky="ew")
 
-    btn_atk = tk.Button(frame_btn, text="2. SIMULATE RANSOMWARE ATTACK", command=run_attacker, bg="#f59e0b", fg="white", font="Sans 10 bold", pady=5, width=30)
+    btn_atk = tk.Button(frame_btn, text="2. SIMULATE RANSOMWARE ATTACK", command=lambda: phishing_entry.show_attack_options(root, run_attacker), bg="#f59e0b", fg="white", font="Sans 10 bold", pady=5, width=30)
     btn_atk.grid(row=0, column=1, padx=6, pady=4, sticky="ew")
 
     btn_dec = tk.Button(frame_btn, text="3. OPEN ADMIN RECOVERY PANEL", command=open_decryptor, bg="#3b82f6", fg="white", font="Sans 10 bold", pady=5, width=30)
