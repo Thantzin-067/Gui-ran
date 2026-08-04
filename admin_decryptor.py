@@ -1,78 +1,169 @@
-import os
 import glob
+import json
+import os
 import tkinter as tk
 from tkinter import messagebox
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 TARGET_DIR = "test_files"
+REPORT_FILE = "incident_report.json"
+TEMP_KEY_FILE = "captured_keys.json"
 PRIVATE_KEY_PATH = "keys/private_key.pem"
 
 root = tk.Tk()
-root.title("Admin Decryption Dashboard")
-root.geometry("800x600")
+root.title("Admin Decryption & Recovery Dashboard")
+root.geometry("850x700")
 root.configure(bg="#1e1e2e")
 
 # Title Label
 label = tk.Label(
-    root, 
-    text="ADMIN FILE RECOVERY DASHBOARD", 
-    font=("Arial", 14, "bold"), 
-    fg="#00FF7F", 
-    bg="#1e1e2e"
+    root,
+    text=" SOC ADMIN DATA RECOVERY DASHBOARD",
+    font=("Arial", 16, "bold"),
+    fg="#00FF7F",
+    bg="#1e1e2e",
 )
 label.pack(pady=15)
 
 # Status Log Window
 log_box = tk.Text(
-    root, 
-    height=15, 
-    width=65, 
-    bg="#181825", 
-    fg="#00FF00", 
-    font=("Courier", 10)
+    root, height=12, width=80, bg="#181825", fg="#00FF00", font=("Courier", 10)
 )
 log_box.pack(pady=10)
-log_box.insert(tk.END, "--- SYSTEM STATUS: Waiting for Decryption Key... ---\n")
+log_box.insert(
+    tk.END, "--- SYSTEM STATUS: Waiting for Decryption Key Input... ---\n"
+)
+
 
 def log(msg):
     log_box.insert(tk.END, msg + "\n")
     log_box.see(tk.END)
 
+
+# -------------------------------------------------------------------
+# 1. RAM Intercepted Key ကို ရှာဖွေပြသပေးသည့် Function
+# -------------------------------------------------------------------
+def scan_ram_key():
+    intercepted_key = None
+
+    if os.path.exists(REPORT_FILE):
+        try:
+            with open(REPORT_FILE, "r") as f:
+                report = json.load(f)
+                intercepted_key = report.get("intercepted_aes_key")
+        except Exception:
+            pass
+
+    if not intercepted_key or intercepted_key == "NOT_CAPTURED":
+        if os.path.exists(TEMP_KEY_FILE):
+            try:
+                with open(TEMP_KEY_FILE, "r") as f:
+                    data = json.load(f)
+                    intercepted_key = data.get("intercepted_key")
+            except Exception:
+                pass
+
+    if (
+        intercepted_key
+        and intercepted_key != "NOT_CAPTURED"
+        and intercepted_key is not None
+    ):
+        key_display_var.set(intercepted_key)
+        log(f"[RAM FORENSICS] Intercepted Key Found: {intercepted_key}")
+        messagebox.showinfo(
+            "RAM Key Found",
+            f"Intercepted AES Key captured by Defender:\n\n{intercepted_key}",
+        )
+    else:
+        key_display_var.set("NO KEY CAPTURED (Defender was OFF)")
+        log(
+            "[WARNING] No Intercepted Key found in volatile memory/report."
+            " Permanent Data Loss!"
+        )
+        messagebox.showwarning(
+            "Warning",
+            "No Intercepted Key Found!\nDefender might have been OFF during attack.",
+        )
+
+
+# Key Frame Display
+key_frame = tk.Frame(root, bg="#1e1e2e")
+key_frame.pack(pady=5)
+
+key_display_label = tk.Label(
+    key_frame,
+    text="RAM Intercepted Key: ",
+    font=("Arial", 10, "bold"),
+    fg="#CBA6F7",
+    bg="#1e1e2e",
+)
+key_display_label.pack(side=tk.LEFT, padx=5)
+
+key_display_var = tk.StringVar(value="Click 'Scan RAM Key' to search...")
+key_display_entry = tk.Entry(
+    key_frame,
+    textvariable=key_display_var,
+    width=45,
+    font=("Courier", 10),
+    state="readonly",
+    bg="#313244",
+    fg="#F5E0DC",
+)
+key_display_entry.pack(side=tk.LEFT, padx=5)
+
+btn_scan = tk.Button(
+    key_frame,
+    text=" Scan RAM Key",
+    command=scan_ram_key,
+    bg="#89B4FA",
+    fg="#11111B",
+    font=("Arial", 9, "bold"),
+)
+btn_scan.pack(side=tk.LEFT, padx=5)
+
+# Manual Decryption Input Field
+input_frame = tk.Frame(root, bg="#1e1e2e")
+input_frame.pack(pady=15)
+
+input_label = tk.Label(
+    input_frame,
+    text="Enter AES Key for Decryption: ",
+    font=("Arial", 11, "bold"),
+    fg="#89B4FA",
+    bg="#1e1e2e",
+)
+input_label.pack(anchor="w")
+
+manual_key_entry = tk.Entry(
+    input_frame, width=60, font=("Courier", 11), bg="#313244", fg="#A6E3A1"
+)
+manual_key_entry.pack(pady=5)
+
+
+# -------------------------------------------------------------------
+# 2. Key Input ဖြင့် Decrypt ပြုလုပ်သည့် Normal Function
+# -------------------------------------------------------------------
 def start_decryption():
-    if not os.path.exists(PRIVATE_KEY_PATH):
-        messagebox.showerror("Error", "Private Key File Missing!")
+    user_key = manual_key_entry.get().strip()
+    if not user_key:
+        messagebox.showerror(
+            "Input Error", "Please enter/paste an AES key to decrypt files!"
+        )
+        log("[ERROR] Decryption aborted: No AES Key provided.")
         return
 
-    key_file_path = os.path.join(TARGET_DIR, "encrypted_aes_key.bin")
-    if not os.path.exists(key_file_path):
-        log("[INFO] No encrypted key found in test_files.")
+    locked_files = glob.glob(os.path.join(TARGET_DIR, "*.locked"))
+
+    if not locked_files:
+        log("[INFO] No .locked files found.")
+        messagebox.showinfo("Info", "No .locked files found to restore.")
         return
 
     try:
-        with open(PRIVATE_KEY_PATH, "rb") as f:
-            private_key = serialization.load_pem_private_key(f.read(), password=None)
-
-        with open(key_file_path, "rb") as f:
-            encrypted_aes_key = f.read()
-
-        aes_key = private_key.decrypt(
-            encrypted_aes_key,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-
-        fernet = Fernet(aes_key)
-        locked_files = glob.glob(os.path.join(TARGET_DIR, "*.locked"))
-
-        if not locked_files:
-            log("[INFO] No .locked files found.")
-            return
-
+        fernet = Fernet(user_key.encode())
+        restored_count = 0
         for file_path in locked_files:
             with open(file_path, "rb") as f:
                 encrypted_data = f.read()
@@ -85,26 +176,115 @@ def start_decryption():
 
             os.remove(file_path)
             log(f"[SUCCESS RESTORED] {os.path.basename(original_path)}")
+            restored_count += 1
 
-        os.remove(key_file_path)
-        log("\n[ ALL FILES SUCCESSFULLY RECOVERED!]")
-        messagebox.showinfo("Success", "All locked files have been restored!")
+        key_file_path = os.path.join(TARGET_DIR, "encrypted_aes_key.bin")
+        if os.path.exists(key_file_path):
+            os.remove(key_file_path)
+
+        log(f"\n[ SUCCESS] {restored_count} Files Restored via AES Key!")
+        messagebox.showinfo(
+            "Success",
+            f"All {restored_count} locked file(s) restored successfully!",
+        )
 
     except Exception as e:
-        log(f"[ERROR] Decryption Failed: {e}")
-        messagebox.showerror("Error", f"Failed to decrypt: {e}")
+        log(f"[ERROR] Decryption Failed! Invalid AES Key: {e}")
+        messagebox.showerror(
+            "Decryption Failed", "Invalid AES Key! Check your key and try again."
+        )
 
-# Button
-btn = tk.Button(
-    root, 
-    text="DECRYPT & RESTORE FILES", 
-    command=start_decryption, 
-    bg="#2b5c8f", 
-    fg="white", 
+
+# -------------------------------------------------------------------
+# 3. [မင်းတောင်းဆိုထားသော] MASTER RSA AUTO-DECRYPT FUNCTION (စမ်းသပ်ရန်အတွက်)
+# -------------------------------------------------------------------
+def master_auto_decrypt():
+    key_file_path = os.path.join(TARGET_DIR, "encrypted_aes_key.bin")
+    locked_files = glob.glob(os.path.join(TARGET_DIR, "*.locked"))
+
+    if not locked_files:
+        log("[INFO] No .locked files found to auto-decrypt.")
+        messagebox.showinfo("Info", "No .locked files found.")
+        return
+
+    if not os.path.exists(PRIVATE_KEY_PATH) or not os.path.exists(
+        key_file_path
+    ):
+        log("[ERROR] Master Private Key or Encrypted Key file missing!")
+        messagebox.showerror("Error", "Private Key missing for Auto-Decrypt!")
+        return
+
+    try:
+        # Private Key ဖြင့် encrypted_aes_key.bin ကို ဖြည်မည်
+        with open(PRIVATE_KEY_PATH, "rb") as f:
+            private_key = serialization.load_pem_private_key(
+                f.read(), password=None
+            )
+
+        with open(key_file_path, "rb") as f:
+            encrypted_aes_key = f.read()
+
+        raw_aes_key = private_key.decrypt(
+            encrypted_aes_key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
+        )
+
+        fernet = Fernet(raw_aes_key)
+        for file_path in locked_files:
+            with open(file_path, "rb") as f:
+                encrypted_data = f.read()
+
+            decrypted_data = fernet.decrypt(encrypted_data)
+            original_path = file_path.replace(".locked", "")
+
+            with open(original_path, "wb") as f:
+                f.write(decrypted_data)
+
+            os.remove(file_path)
+            log(f"[MASTER RESTORED] {os.path.basename(original_path)}")
+
+        os.remove(key_file_path)
+        log("\n[ MASTER RECOVERY] All Files Force Decrypted via RSA Key!")
+        messagebox.showinfo(
+            "Master Reset Success",
+            "Files Force Decrypted! Ready for next demo run.",
+        )
+
+    except Exception as e:
+        log(f"[ERROR] Master Decryption Failed: {e}")
+        messagebox.showerror("Error", f"Master Decryption Failed: {e}")
+
+
+# Buttons Frame
+btn_frame = tk.Frame(root, bg="#1e1e2e")
+btn_frame.pack(pady=10)
+btn_decrypt = tk.Button(
+    btn_frame,
+    text=" DECRYPT WITH INPUT KEY",
+    command=start_decryption,
+    bg="#A6E3A1",
+    fg="#11111B",
     font=("Arial", 11, "bold"),
-    padx=10, 
-    pady=5
+    padx=10,
+    pady=6,
 )
-btn.pack(pady=10)
+btn_decrypt.pack(side=tk.LEFT, padx=10)
+
+#  Master Auto Restore Button
+btn_master = tk.Button(
+    btn_frame,
+    text=" MASTER RESET / AUTO DECRYPT",
+    command=master_auto_decrypt,
+    bg="#F38BA8",
+    fg="#11111B",
+    font=("Arial", 10, "bold"),
+    padx=10,
+    pady=6,
+)
+btn_master.pack(side=tk.LEFT, padx=10)
 
 root.mainloop()
