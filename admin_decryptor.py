@@ -2,7 +2,7 @@ import glob
 import json
 import os
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -11,10 +11,11 @@ TARGET_DIR = "test_files"
 REPORT_FILE = "incident_report.json"
 TEMP_KEY_FILE = "captured_keys.json"
 PRIVATE_KEY_PATH = "keys/private_key.pem"
+QUARANTINE_DIR = "Quarantine_Vault"
 
 root = tk.Tk()
-root.title("Admin Decryption & Recovery Dashboard")
-root.geometry("850x700")
+root.title("SOC Enterprise Protection & Recovery Dashboard")
+root.geometry("850x730")
 root.configure(bg="#1e1e2e")
 
 # Title Label
@@ -29,7 +30,7 @@ label.pack(pady=15)
 
 # Status Log Window
 log_box = tk.Text(
-    root, height=12, width=80, bg="#181825", fg="#00FF00", font=("Courier", 10)
+    root, height=11, width=80, bg="#181825", fg="#00FF00", font=("Courier", 10)
 )
 log_box.pack(pady=10)
 log_box.insert(
@@ -125,7 +126,7 @@ btn_scan.pack(side=tk.LEFT, padx=5)
 
 # Manual Decryption Input Field
 input_frame = tk.Frame(root, bg="#1e1e2e")
-input_frame.pack(pady=15)
+input_frame.pack(pady=10)
 
 input_label = tk.Label(
     input_frame,
@@ -140,13 +141,12 @@ manual_key_entry = tk.Entry(
     input_frame, width=60, font=("Courier", 11), bg="#313244", fg="#A6E3A1"
 )
 manual_key_entry.pack(pady=5)
-
-
 # -------------------------------------------------------------------
 # 2. Key Input ဖြင့် Decrypt ပြုလုပ်သည့် Normal Function
 # -------------------------------------------------------------------
 def start_decryption():
     user_key = manual_key_entry.get().strip()
+
     if not user_key:
         messagebox.showerror(
             "Input Error", "Please enter/paste an AES key to decrypt files!"
@@ -196,7 +196,7 @@ def start_decryption():
 
 
 # -------------------------------------------------------------------
-# 3. [မင်းတောင်းဆိုထားသော] MASTER RSA AUTO-DECRYPT FUNCTION (စမ်းသပ်ရန်အတွက်)
+# 3. MASTER RSA AUTO-DECRYPT FUNCTION
 # -------------------------------------------------------------------
 def master_auto_decrypt():
     key_file_path = os.path.join(TARGET_DIR, "encrypted_aes_key.bin")
@@ -215,7 +215,6 @@ def master_auto_decrypt():
         return
 
     try:
-        # Private Key ဖြင့် encrypted_aes_key.bin ကို ဖြည်မည်
         with open(PRIVATE_KEY_PATH, "rb") as f:
             private_key = serialization.load_pem_private_key(
                 f.read(), password=None
@@ -257,14 +256,59 @@ def master_auto_decrypt():
     except Exception as e:
         log(f"[ERROR] Master Decryption Failed: {e}")
         messagebox.showerror("Error", f"Master Decryption Failed: {e}")
+        # -------------------------------------------------------------------
+# 4. [FEATURE 3] QUARANTINE VAULT INSPECTOR FUNCTION
+# -------------------------------------------------------------------
+def open_quarantine_inspector():
+    q_window = tk.Toplevel(root)
+    q_window.title(" Quarantine Vault Inspector")
+    q_window.geometry("550x350")
+    q_window.configure(bg="#181825")
+
+    title = tk.Label(
+        q_window,
+        text=" ISOLATED MALWARE PAYLOADS",
+        font=("Arial", 12, "bold"),
+        fg="#F38BA8",
+        bg="#181825",
+    )
+    title.pack(pady=10)
+
+    # Treeview Table
+    cols = ("File Name", "Size (Bytes)", "Status")
+    tree = ttk.Treeview(q_window, columns=cols, show="headings", height=8)
+
+    for col in cols:
+        tree.heading(col, text=col)
+        tree.column(col, width=160, anchor="center")
+
+    tree.pack(pady=10, fill=tk.BOTH, expand=True, padx=10)
+
+    if os.path.exists(QUARANTINE_DIR):
+        files = os.listdir(QUARANTINE_DIR)
+        if files:
+            for file in files:
+                file_path = os.path.join(QUARANTINE_DIR, file)
+                size = os.path.getsize(file_path)
+                tree.insert("", tk.END, values=(file, f"{size} B", "ISOLATED"))
+            log(
+                f"[QUARANTINE INSPECTOR] Displaying {len(files)} quarantined"
+                " payload(s)."
+            )
+        else:
+            tree.insert("", tk.END, values=("No files isolated", "0", "CLEAN"))
+            log("[QUARANTINE INSPECTOR] Vault is empty.")
+    else:
+        tree.insert("", tk.END, values=("Vault Directory Missing", "0", "N/A"))
 
 
 # Buttons Frame
 btn_frame = tk.Frame(root, bg="#1e1e2e")
 btn_frame.pack(pady=10)
+
 btn_decrypt = tk.Button(
     btn_frame,
-    text=" DECRYPT WITH INPUT KEY",
+    text=" DECRYPT WITH KEY",
     command=start_decryption,
     bg="#A6E3A1",
     fg="#11111B",
@@ -272,12 +316,11 @@ btn_decrypt = tk.Button(
     padx=10,
     pady=6,
 )
-btn_decrypt.pack(side=tk.LEFT, padx=10)
+btn_decrypt.pack(side=tk.LEFT, padx=5)
 
-#  Master Auto Restore Button
 btn_master = tk.Button(
     btn_frame,
-    text=" MASTER RESET / AUTO DECRYPT",
+    text=" MASTER RESET",
     command=master_auto_decrypt,
     bg="#F38BA8",
     fg="#11111B",
@@ -285,6 +328,18 @@ btn_master = tk.Button(
     padx=10,
     pady=6,
 )
-btn_master.pack(side=tk.LEFT, padx=10)
+btn_master.pack(side=tk.LEFT, padx=5)
+
+btn_quarantine = tk.Button(
+    btn_frame,
+    text=" VIEW QUARANTINE",
+    command=open_quarantine_inspector,
+    bg="#FAB387",
+    fg="#11111B",
+    font=("Arial", 10, "bold"),
+    padx=10,
+    pady=6,
+)
+btn_quarantine.pack(side=tk.LEFT, padx=5)
 
 root.mainloop()
